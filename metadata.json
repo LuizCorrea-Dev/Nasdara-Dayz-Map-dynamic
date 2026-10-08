@@ -1,0 +1,6 @@
+{
+  "name": "Nasdara DayZ - Mapa Interativo & Guia de Sobrevivência",
+  "description": "Mapa interativo dinâmico completo da Província de Nasdara (DayZ Badlands DLC) em Português BR. Encontre bases militares, poços de água reparáveis, veículos 1.30, sinais de rádio Morse e coordenadas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
