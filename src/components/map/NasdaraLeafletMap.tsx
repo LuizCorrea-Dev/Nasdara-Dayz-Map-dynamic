@@ -671,6 +671,81 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
     });
   }, [activeCategories, searchQuery, showCityNames]);
 
+  // Effect to handle GPS coordinate search like "x0.64 y0.86"
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    // Remove any previous search pin
+    if ((mapInstanceRef.current as any)._searchPin) {
+      (mapInstanceRef.current as any)._searchPin.remove();
+      delete (mapInstanceRef.current as any)._searchPin;
+    }
+
+    if (!searchQuery.trim()) return;
+
+    // Match patterns like "x 0.64 y 0.86", "x=0.64, y=0.86", "x0.64 e y0.86", or z instead of y
+    const coordMatch = searchQuery
+      .toLowerCase()
+      .match(/x\s*[:=]?\s*([0-9.]+)\s*(?:e\s+)?(?:[,;\s]+)?(?:y|z)\s*[:=]?\s*([0-9.]+)/);
+
+    if (coordMatch) {
+      let xVal = parseFloat(coordMatch[1]);
+      let zVal = parseFloat(coordMatch[2]);
+
+      // Se os valores forem <= 1, consideramos que é uma fração do tamanho total do mapa (16384)
+      if (xVal <= 1.0 && xVal > 0) xVal = xVal * 16384;
+      if (zVal <= 1.0 && zVal > 0) zVal = zVal * 16384;
+
+      // Limitar aos bounds do mapa
+      xVal = Math.max(0, Math.min(16384, xVal));
+      zVal = Math.max(0, Math.min(16384, zVal));
+
+      // inGameToLatLng converte x,z para lat,lng do leaflet
+      const lng = (xVal / 16384) * 256.0;
+      const lat = (zVal / 16384 - 1.0) * 256.0;
+
+      const targetLatLng = L.latLng(lat, lng);
+      
+      // Criar um marcador temporário para o resultado da busca
+      const searchIcon = L.divIcon({
+        html: `
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background-color: #ef4444;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 4px 6px rgba(0, 0, 0, 0.5);
+            animation: pulse 1.5s infinite;
+          ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <style>
+            @keyframes pulse {
+              0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+              70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+              100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+            }
+          </style>
+        `,
+        className: '',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const searchPin = L.marker(targetLatLng, { icon: searchIcon, zIndexOffset: 9000 }).addTo(mapInstanceRef.current);
+      (mapInstanceRef.current as any)._searchPin = searchPin;
+
+      // Centraliza e dá zoom na coordenada
+      mapInstanceRef.current.flyTo(targetLatLng, 5, { duration: 1.5 });
+    }
+  }, [searchQuery]);
+
   const getMarkerColor = (filterKey: string) => {
     return FILTER_KEY_COLORS[filterKey] || '#F59E0B';
   };
