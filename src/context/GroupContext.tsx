@@ -68,6 +68,7 @@ interface GroupContextType {
     codeLock?: string;
     lootNotes?: string;
     additionalNotes?: string;
+    groupId?: number;
   }) => Promise<GroupLocation>;
   deleteLocation: (locationId: number, targetGroupId?: number) => Promise<void>;
   getInviteLink: (group: GroupTenant) => string;
@@ -440,15 +441,17 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     codeLock?: string;
     lootNotes?: string;
     additionalNotes?: string;
+    groupId?: number;
   }): Promise<GroupLocation> => {
-    if (!activeGroup) throw new Error('Nenhum grupo ativo selecionado');
+    const targetGroupId = data.groupId || activeGroup?.id;
+    if (!targetGroupId) throw new Error('Nenhum grupo selecionado');
     if (!user) throw new Error('Não autenticado');
 
     // Try server first
     try {
       const token = await getIdToken();
       if (token) {
-        const res = await fetch(`/api/groups/${activeGroup.id}/locations`, {
+        const res = await fetch(`/api/groups/${targetGroupId}/locations`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -472,7 +475,7 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Local fallback
     const newLoc: GroupLocation = {
       id: Date.now(),
-      groupId: activeGroup.id,
+      groupId: targetGroupId,
       createdById: user.id,
       createdByName: user.name,
       name: data.name,
@@ -490,11 +493,11 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setLocations(prev => [newLoc, ...prev]);
-    setVisibleGroupIds(prev => new Set(prev).add(activeGroup.id));
+    setVisibleGroupIds(prev => new Set(prev).add(targetGroupId));
 
     setGroups(prev => {
       const updated = prev.map(g => {
-        if (g.id === activeGroup.id) {
+        if (g.id === targetGroupId) {
           const currentLocs = g.locations || [];
           return { ...g, locations: [newLoc, ...currentLocs] };
         }

@@ -215,12 +215,13 @@ export const SaveLocationModal: React.FC<SaveLocationModalProps> = ({
   },
   onSuccess,
 }) => {
-  const { activeGroup, addLocation } = useGroup();
+  const { activeGroup, groups, addLocation } = useGroup();
 
   const [name, setName] = useState(defaultCoords.initialName || '');
   const [codeLock, setCodeLock] = useState('');
   const [lootNotes, setLootNotes] = useState(defaultCoords.initialNote || '');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,10 +233,23 @@ export const SaveLocationModal: React.FC<SaveLocationModalProps> = ({
       setCodeLock('');
       setAdditionalNotes('');
       setError(null);
+      if (activeGroup) {
+        setSelectedGroupIds([activeGroup.id]);
+      } else if (groups.length > 0) {
+        setSelectedGroupIds([groups[0].id]);
+      } else {
+        setSelectedGroupIds([]);
+      }
     }
-  }, [isOpen, defaultCoords.initialName, defaultCoords.initialNote]);
+  }, [isOpen, defaultCoords.initialName, defaultCoords.initialNote, activeGroup, groups]);
 
   if (!isOpen) return null;
+
+  const toggleGroupSelection = (id: number) => {
+    setSelectedGroupIds(prev =>
+      prev.includes(id) ? prev.filter(gId => gId !== id) : [...prev, id]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,25 +257,31 @@ export const SaveLocationModal: React.FC<SaveLocationModalProps> = ({
       setError('Por favor, informe o nome do local');
       return;
     }
-    if (!activeGroup) {
-      setError('Selecione um grupo ativo antes de salvar');
+    if (selectedGroupIds.length === 0) {
+      setError('Selecione pelo menos um grupo antes de salvar');
       return;
     }
 
     try {
       setError(null);
       setSubmitting(true);
-      await addLocation({
-        name: name.trim(),
-        militaryGrid: defaultCoords.militaryGrid || '---',
-        inGameX: Math.round(defaultCoords.inGameX || 8192),
-        inGameZ: Math.round(defaultCoords.inGameZ || 8192),
-        lat: defaultCoords.lat,
-        lng: defaultCoords.lng,
-        codeLock: codeLock.trim() || undefined,
-        lootNotes: lootNotes.trim() || undefined,
-        additionalNotes: additionalNotes.trim() || undefined,
-      });
+      
+      await Promise.all(
+        selectedGroupIds.map(groupId =>
+          addLocation({
+            name: name.trim(),
+            militaryGrid: defaultCoords.militaryGrid || '---',
+            inGameX: Math.round(defaultCoords.inGameX || 8192),
+            inGameZ: Math.round(defaultCoords.inGameZ || 8192),
+            lat: defaultCoords.lat,
+            lng: defaultCoords.lng,
+            codeLock: codeLock.trim() || undefined,
+            lootNotes: lootNotes.trim() || undefined,
+            additionalNotes: additionalNotes.trim() || undefined,
+            groupId,
+          })
+        )
+      );
 
       if (onSuccess) onSuccess();
       onClose();
@@ -278,7 +298,7 @@ export const SaveLocationModal: React.FC<SaveLocationModalProps> = ({
         <Header>
           <h2>
             <MapPin size={18} color="#EA580C" />
-            Salvar Local no Grupo: {activeGroup?.name || 'Selecione um grupo'}
+            Salvar Local no Esquadrão
           </h2>
           <CloseButton onClick={onClose} aria-label="Fechar">
             <X size={18} />
@@ -287,6 +307,29 @@ export const SaveLocationModal: React.FC<SaveLocationModalProps> = ({
 
         <Form onSubmit={handleSubmit}>
           {error && <ErrorMsg>{error}</ErrorMsg>}
+
+          <FormGroup>
+            <label>
+              Escolha os Esquadrões (Grupos)
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', border: '1px solid #333', borderRadius: '4px' }}>
+              {groups.length === 0 ? (
+                <div style={{ fontSize: '13px', color: '#888' }}>Você não participa de nenhum esquadrão ainda.</div>
+              ) : (
+                groups.map(g => (
+                  <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'normal', fontSize: '14px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedGroupIds.includes(g.id)}
+                      onChange={() => toggleGroupSelection(g.id)}
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                    {g.name}
+                  </label>
+                ))
+              )}
+            </div>
+          </FormGroup>
 
           <FormGroup>
             <label>
