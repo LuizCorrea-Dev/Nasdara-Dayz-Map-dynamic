@@ -426,26 +426,26 @@ export const NasdaraMap: React.FC<NasdaraMapProps> = ({
   const renderCategoryIcon = (cat: MarkerCategory) => {
     switch (cat) {
       case 'military':
-        return <Shield size={14} color="#FFF" />;
+        return <Shield size={7} color="#FFF" />;
       case 'water':
-        return <Droplet size={14} color="#FFF" />;
+        return <Droplet size={7} color="#FFF" />;
       case 'vehicle':
-        return <Compass size={14} color="#FFF" />;
+        return <Compass size={7} color="#FFF" />;
       case 'cities':
-        return <Building size={14} color="#FFF" />;
+        return <Building size={7} color="#FFF" />;
       case 'radio':
-        return <Radio size={14} color="#FFF" />;
+        return <Radio size={7} color="#FFF" />;
       case 'crash':
-        return <Flame size={14} color="#FFF" />;
+        return <Flame size={7} color="#FFF" />;
       case 'danger':
-        return <AlertTriangle size={14} color="#FFF" />;
+        return <AlertTriangle size={7} color="#FFF" />;
       case 'fauna':
-        return <Eye size={14} color="#FFF" />;
+        return <Eye size={7} color="#FFF" />;
       case 'medical':
-        return <Cross size={14} color="#FFF" />;
+        return <Cross size={7} color="#FFF" />;
       case 'custom':
       default:
-        return <MapPin size={14} color="#FFF" />;
+        return <MapPin size={7} color="#FFF" />;
     }
   };
 
@@ -946,15 +946,15 @@ export const NasdaraMap: React.FC<NasdaraMapProps> = ({
               <circle
                 cx="0"
                 cy="0"
-                r={isSelected ? 16 : 13}
+                r={isSelected ? 8 : 6.5}
                 fill={color}
                 stroke="#FFFFFF"
-                strokeWidth={isSelected ? 3 : 2}
+                strokeWidth={isSelected ? 1.5 : 1}
                 filter="url(#marker-glow)"
               />
 
               {/* Icon inside marker */}
-              <g transform="translate(-7, -7)">
+              <g transform="translate(-3.5, -3.5)">
                 {renderCategoryIcon(loc.category)}
               </g>
 
@@ -1015,13 +1015,13 @@ export const NasdaraMap: React.FC<NasdaraMapProps> = ({
             <circle
               cx="0"
               cy="0"
-              r="14"
+              r="7"
               fill="#F59E0B"
               stroke="#FFFFFF"
-              strokeWidth="2.5"
+              strokeWidth="1.5"
             />
-            <g transform="translate(-7, -7)">
-              <MapPin size={14} color="#FFF" />
+            <g transform="translate(-3.5, -3.5)">
+              <MapPin size={7} color="#FFF" />
             </g>
           </MarkerPinGroup>
         ))}

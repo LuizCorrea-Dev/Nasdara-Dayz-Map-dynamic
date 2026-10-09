@@ -7,6 +7,7 @@ import {
   Move,
   Edit3,
   Trash2,
+  Shield,
 } from 'lucide-react';
 import { RealNasdaraMarker, REAL_CATEGORY_LABELS } from '../../data/nasdaraTypes';
 import { BottomSheet } from '../ui/BottomSheet';
@@ -20,6 +21,7 @@ interface LocationDetailSheetProps {
   onStartDrag?: (markerId: string) => void;
   onEdit?: (marker: RealNasdaraMarker) => void;
   onDelete?: (markerId: string) => void;
+  onSaveToGroup?: (loc: RealNasdaraMarker) => void;
 }
 
 const DetailSection = styled.div`
@@ -116,6 +118,7 @@ export const LocationDetailSheet: React.FC<LocationDetailSheetProps> = ({
   onStartDrag,
   onEdit,
   onDelete,
+  onSaveToGroup,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -127,7 +130,9 @@ export const LocationDetailSheet: React.FC<LocationDetailSheetProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isCustom = location.category === 'custom' || location.filterKey === 'custom';
+  const isGroupMarker = String(location.id).startsWith('group-');
+  const isPersonalMarker = !isGroupMarker && (location.category === 'custom' || location.filterKey === 'custom');
+  const isCustom = isPersonalMarker || isGroupMarker;
   const catKey = location.filterKey || location.category || 'custom';
   const catInfo = REAL_CATEGORY_LABELS[catKey];
 
@@ -137,36 +142,42 @@ export const LocationDetailSheet: React.FC<LocationDetailSheetProps> = ({
       onClose={onClose}
       title={location.name}
       subtitle={
-        isCustom
-          ? `Marcador Pessoal do Jogador • Grade [${location.grid}]`
+        isGroupMarker
+          ? `Marcador de Grupo • Grade [${location.grid}]`
+          : isPersonalMarker
+          ? `Marcador Pessoal`
           : `Província de Nasdara (DayZ Badlands DLC) • Grade [${location.grid}]`
       }
     >
       <DetailSection>
-        {/* Badges Row */}
-        <HeaderBadgesRow>
-          <Badge variant="primary">{catInfo?.label || catKey}</Badge>
-          <Badge variant="military">Grade: {location.grid}</Badge>
-          {location.subCategory && (
-            <Badge variant="default">{location.subCategory}</Badge>
-          )}
-        </HeaderBadgesRow>
+        {/* Badges Row - Hidden for personal markers */}
+        {!isPersonalMarker && (
+          <HeaderBadgesRow>
+            <Badge variant="primary">{catInfo?.label || catKey}</Badge>
+            <Badge variant="military">Grade: {location.grid}</Badge>
+            {location.subCategory && (
+              <Badge variant="default">{location.subCategory}</Badge>
+            )}
+          </HeaderBadgesRow>
+        )}
 
-        {/* Tactical Coordinates Grid */}
-        <CoordinatesGrid>
-          <CoordItem>
-            <CoordLabel>Grade Militar</CoordLabel>
-            <CoordValue>[{location.grid}]</CoordValue>
-          </CoordItem>
-          <CoordItem>
-            <CoordLabel>In-Game X</CoordLabel>
-            <CoordValue>{location.x}</CoordValue>
-          </CoordItem>
-          <CoordItem>
-            <CoordLabel>In-Game Z</CoordLabel>
-            <CoordValue>{location.z}</CoordValue>
-          </CoordItem>
-        </CoordinatesGrid>
+        {/* Tactical Coordinates Grid - Hidden for personal markers */}
+        {!isPersonalMarker && (
+          <CoordinatesGrid>
+            <CoordItem>
+              <CoordLabel>Grade Militar</CoordLabel>
+              <CoordValue>[{location.grid}]</CoordValue>
+            </CoordItem>
+            <CoordItem>
+              <CoordLabel>In-Game X</CoordLabel>
+              <CoordValue>{location.x}</CoordValue>
+            </CoordItem>
+            <CoordItem>
+              <CoordLabel>In-Game Z</CoordLabel>
+              <CoordValue>{location.z}</CoordValue>
+            </CoordItem>
+          </CoordinatesGrid>
+        )}
 
         {/* Description */}
         <DescriptionText>{location.desc}</DescriptionText>
@@ -178,9 +189,9 @@ export const LocationDetailSheet: React.FC<LocationDetailSheetProps> = ({
         )}
 
         {/* Custom Marker Controls (Drag & Reposition, Edit, Delete) */}
-        {isCustom && (
+        {isPersonalMarker && (
           <CustomActionsContainer>
-            <CustomActionsTitle>Gerenciar Meu Marcador</CustomActionsTitle>
+            <CustomActionsTitle>Gerenciar Marcador Pessoal</CustomActionsTitle>
             <CustomButtonsGrid>
               {onStartDrag && (
                 <Button
@@ -225,7 +236,31 @@ export const LocationDetailSheet: React.FC<LocationDetailSheetProps> = ({
                   onClose();
                 }}
               >
-                Excluir Marcador
+                Excluir Marcador Pessoal
+              </Button>
+            )}
+          </CustomActionsContainer>
+        )}
+
+        {/* Group Marker Controls (Delete from Group / Cloud SQL) */}
+        {isGroupMarker && (
+          <CustomActionsContainer>
+            <CustomActionsTitle>Gerenciar Marcador do Grupo</CustomActionsTitle>
+            {onDelete && (
+              <Button
+                variant="danger"
+                size="md"
+                fullWidth
+                leftIcon={<Trash2 size={16} />}
+                onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onDelete(location.id);
+                  onClose();
+                }}
+              >
+                Excluir Marcador do Grupo
               </Button>
             )}
           </CustomActionsContainer>
@@ -233,6 +268,18 @@ export const LocationDetailSheet: React.FC<LocationDetailSheetProps> = ({
 
         {/* Standard Actions */}
         <ActionsRow>
+          {!isGroupMarker && onSaveToGroup && (
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              leftIcon={<Shield size={16} color="#0284C7" />}
+              onClick={() => onSaveToGroup(location)}
+            >
+              Salvar no Esquadrão
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="md"

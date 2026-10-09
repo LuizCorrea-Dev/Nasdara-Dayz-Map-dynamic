@@ -9,8 +9,14 @@ import {
   Filter,
   PanelLeftClose,
   PanelLeftOpen,
+  Users,
+  Shield,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 import { useAppTheme } from '../../theme/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { useGroup } from '../../context/GroupContext';
 import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 
@@ -22,6 +28,8 @@ interface NavbarProps {
   onOpenGuide: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
+  onOpenLogin: () => void;
+  onOpenGroupManager: () => void;
 }
 
 const NavHeader = styled.header`
@@ -96,6 +104,65 @@ const ActionsContainer = styled.div`
   flex-shrink: 0;
 `;
 
+const SquadButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  background-color: ${props => props.theme.colors.surfaceVariant};
+  border: 1px solid ${props => props.theme.colors.primary};
+  border-radius: ${props => props.theme.borderRadius.md};
+  color: ${props => props.theme.colors.text};
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: ${props => props.theme.colors.surfaceHover};
+    transform: translateY(-1px);
+  }
+
+  .squad-name {
+    color: ${props => props.theme.colors.primary};
+  }
+
+  @media (max-width: 640px) {
+    padding: 0 8px;
+    font-size: 11px;
+    .label-full {
+      display: none;
+    }
+  }
+`;
+
+const LoginButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  background-color: ${props => props.theme.colors.surface};
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: ${props => props.theme.borderRadius.md};
+  color: ${props => props.theme.colors.text};
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: ${props => props.theme.colors.primary};
+    color: ${props => props.theme.colors.primary};
+  }
+
+  @media (max-width: 640px) {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+`;
+
 export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchChange,
@@ -104,8 +171,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGuide,
   isSidebarOpen,
   onToggleSidebar,
+  onOpenLogin,
+  onOpenGroupManager,
 }) => {
   const { mode, toggleTheme } = useAppTheme();
+  const { user, signOut } = useAuth();
+  const { activeGroup } = useGroup();
 
   return (
     <NavHeader>
@@ -141,6 +212,20 @@ export const Navbar: React.FC<NavbarProps> = ({
       </SearchContainer>
 
       <ActionsContainer>
+        {/* Squad management & Login */}
+        {user ? (
+          <SquadButton onClick={onOpenGroupManager} title="Gerenciar Esquadrão e Grupos">
+            <Shield size={16} color="#EA580C" />
+            <span className="label-full">Esquadrão:</span>
+            <span className="squad-name">{activeGroup ? activeGroup.name : 'Selecionar'}</span>
+          </SquadButton>
+        ) : (
+          <LoginButton onClick={onOpenLogin} title="Entrar para sincronizar seu grupo">
+            <LogIn size={15} />
+            <span>Login / Esquadrão</span>
+          </LoginButton>
+        )}
+
         {/* Sandstorm dynamic trigger */}
         <IconButton
           variant={isSandstormActive ? 'primary' : 'default'}
@@ -174,6 +259,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </IconButton>
+
+        {/* Logout button if logged in */}
+        {user && (
+          <IconButton
+            variant="default"
+            size="md"
+            onClick={signOut}
+            aria-label="Desconectar"
+            title={`Sair da conta (${user.email})`}
+          >
+            <LogOut size={16} />
+          </IconButton>
+        )}
       </ActionsContainer>
     </NavHeader>
   );

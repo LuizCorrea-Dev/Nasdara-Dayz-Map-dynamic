@@ -1,8 +1,15 @@
+# Dependencies & Build Outputs
 node_modules/
 build/
 dist/
 coverage/
 .DS_Store
 *.log
+.vercel/
+*.tsbuildinfo
+.eslintcache
+
+# Sensitive Environment Variables (Never commit to Git / GitHub)
 .env*
 !.env.example
+

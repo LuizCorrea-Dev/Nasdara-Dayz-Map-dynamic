@@ -39,12 +39,19 @@ import {
   MapPin,
   ShieldAlert,
   RotateCcw,
+  Plus,
+  LogIn,
+  Lock,
+  Trash2,
 } from 'lucide-react';
 import {
   DAYZ_FILTER_GROUPS,
   FilterGroupDef,
   FilterItemDef,
 } from '../../data/dayzFilterSchema';
+import { useGroup, GroupLocation } from '../../context/GroupContext';
+import { useAuth } from '../../context/AuthContext';
+import { CustomUserMarker } from '../map/NasdaraLeafletMap';
 
 interface SidebarFilterDrawerProps {
   isOpen: boolean;
@@ -59,6 +66,14 @@ interface SidebarFilterDrawerProps {
   onToggleGrid: () => void;
   showCityNames: boolean;
   onToggleCityNames: () => void;
+  onOpenLogin?: () => void;
+  onOpenGroupManager?: () => void;
+  customMarkers?: CustomUserMarker[];
+  onSelectCustomMarker?: (marker: CustomUserMarker) => void;
+  onOpenAddMarker?: () => void;
+  onSelectGroupLocation?: (loc: GroupLocation) => void;
+  onDeleteCustomMarker?: (markerId: string) => void;
+  onDeleteGroupLocation?: (locationId: number, groupId: number) => void;
 }
 
 const DrawerWrapper = styled.aside<{ $isOpen: boolean }>`
@@ -455,6 +470,146 @@ const ItemCategoryTag = styled.span<{ $color: string }>`
   text-transform: uppercase;
 `;
 
+const MarkerSubList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 0 6px 0;
+`;
+
+const MarkerItemCard = styled.button<{ $accentColor?: string }>`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  background-color: #121010;
+  border: 1px solid #222020;
+  border-left: 3px solid ${props => props.$accentColor || '#f59e0b'};
+  border-radius: 2px;
+  color: #ffffff;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+  box-sizing: border-box;
+
+  &:hover {
+    background-color: #1a1717;
+    border-color: ${props => props.$accentColor || '#f59e0b'};
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  &:active {
+    transform: scale(0.99);
+  }
+`;
+
+const MarkerItemHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+`;
+
+const MarkerItemTitle = styled.span`
+  font-size: 12px;
+  font-weight: 700;
+  color: #f3f4f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+`;
+
+const MarkerItemMetaRow = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  color: #9ca3af;
+`;
+
+const MarkerMetaBadge = styled.span<{ $color?: string }>`
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background-color: ${props => (props.$color ? `${props.$color}22` : '#1f2937')};
+  color: ${props => props.$color || '#d1d5db'};
+  border: 1px solid ${props => (props.$color ? `${props.$color}44` : '#374151')};
+`;
+
+const EmptySubListText = styled.div`
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: #888888;
+  font-style: italic;
+  text-align: center;
+  background-color: #121111;
+  border: 1px dashed #262424;
+  border-radius: 2px;
+`;
+
+const QuickActionButton = styled.button<{ $color?: string }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  margin-top: 4px;
+  background-color: #141212;
+  border: 1px dashed ${props => props.$color || '#f59e0b'};
+  border-radius: 2px;
+  color: ${props => props.$color || '#f59e0b'};
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background-color: ${props => (props.$color ? `${props.$color}18` : 'rgba(245, 158, 11, 0.1)')};
+    border-style: solid;
+  }
+`;
+
+const MarkerCardWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+`;
+
+const DeleteIconButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-height: 44px;
+  background-color: #161111;
+  border: 1px solid #301717;
+  border-radius: 2px;
+  color: #ef4444;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background-color: #dc2626;
+    border-color: #ef4444;
+    color: #ffffff;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
 // Helper icon component
 const RenderCategoryIcon: React.FC<{ iconName: string; size?: number }> = ({ iconName, size = 15 }) => {
   switch (iconName) {
@@ -537,7 +692,32 @@ export const SidebarFilterDrawer: React.FC<SidebarFilterDrawerProps> = ({
   onToggleGrid,
   showCityNames,
   onToggleCityNames,
+  onOpenLogin,
+  onOpenGroupManager,
+  customMarkers = [],
+  onSelectCustomMarker,
+  onOpenAddMarker,
+  onSelectGroupLocation,
+  onDeleteCustomMarker,
+  onDeleteGroupLocation,
 }) => {
+  const { user } = useAuth();
+  const {
+    groups,
+    visibleGroupIds,
+    toggleGroupVisibility,
+  } = useGroup();
+
+  const [isMyMarkersOpen, setIsMyMarkersOpen] = useState(true);
+  const [openGroupSections, setOpenGroupSections] = useState<Record<number, boolean>>({});
+
+  const toggleGroupSection = (groupId: number) => {
+    setOpenGroupSections(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
   // Track open/collapsed accordions; open militar, carros, pecas, medico by default
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     militar: true,
@@ -676,8 +856,315 @@ export const SidebarFilterDrawer: React.FC<SidebarFilterDrawerProps> = ({
               <DayZSwitch $checked={showCityNames} />
             </ToggleRowButton>
 
-            {/* 3. Filter Groups categorized with unique icons and colors */}
-            {DAYZ_FILTER_GROUPS.map(group => {
+            {/* 2.2. MEUS MARCADORES (LOGO ACIMA DOS MARCADORES DO GRUPO) */}
+            <AccordionGroup key="meus-marcadores">
+              <AccordionHeader
+                type="button"
+                $isOpen={isMyMarkersOpen}
+                $hasActiveItems={activeFilterKeys.has('custom')}
+                $groupColor="#F59E0B"
+                onClick={() => setIsMyMarkersOpen(!isMyMarkersOpen)}
+                aria-expanded={isMyMarkersOpen}
+              >
+                <GroupHeaderLeft>
+                  <Star size={15} color="#F59E0B" />
+                  <span>Meus Marcadores</span>
+                  <GroupBadge $color="#F59E0B">
+                    {customMarkers.length} {customMarkers.length === 1 ? 'marcador' : 'marcadores'}
+                  </GroupBadge>
+                </GroupHeaderLeft>
+
+                <GroupHeaderRight>
+                  <CategoryEyeButton
+                    role="button"
+                    tabIndex={0}
+                    $isActive={activeFilterKeys.has('custom')}
+                    $color="#F59E0B"
+                    onClick={e => {
+                      e.stopPropagation();
+                      onToggleFilterKey('custom');
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleFilterKey('custom');
+                      }
+                    }}
+                    title={
+                      activeFilterKeys.has('custom')
+                        ? 'Ocultar meus marcadores no mapa'
+                        : 'Exibir meus marcadores no mapa'
+                    }
+                    aria-label={
+                      activeFilterKeys.has('custom')
+                        ? 'Ocultar meus marcadores no mapa'
+                        : 'Exibir meus marcadores no mapa'
+                    }
+                  >
+                    {activeFilterKeys.has('custom') ? <Eye size={15} /> : <EyeOff size={15} />}
+                  </CategoryEyeButton>
+                  {isMyMarkersOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </GroupHeaderRight>
+              </AccordionHeader>
+
+              <AccordionContent $isOpen={isMyMarkersOpen}>
+                <MarkerSubList>
+                  {customMarkers.length > 0 ? (
+                    customMarkers.map(cm => (
+                      <MarkerCardWrapper key={`custom-${cm.id}`}>
+                        <MarkerItemCard
+                          type="button"
+                          $accentColor="#F59E0B"
+                          onClick={() => onSelectCustomMarker?.(cm)}
+                          title="Clique para localizar no mapa"
+                        >
+                          <MarkerItemHeader>
+                            <MarkerItemTitle>{cm.name}</MarkerItemTitle>
+                            <MarkerMetaBadge $color="#F59E0B">
+                              {cm.grid || 'J-05'}
+                            </MarkerMetaBadge>
+                          </MarkerItemHeader>
+                          <MarkerItemMetaRow>
+                            <span>X: {cm.x}</span>
+                            <span>•</span>
+                            <span>Z: {cm.z}</span>
+                            {cm.note && (
+                              <>
+                                <span>•</span>
+                                <span
+                                  style={{
+                                    fontStyle: 'italic',
+                                    maxWidth: '120px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {cm.note}
+                                </span>
+                              </>
+                            )}
+                          </MarkerItemMetaRow>
+                        </MarkerItemCard>
+
+                        {onDeleteCustomMarker && (
+                          <DeleteIconButton
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              onDeleteCustomMarker(cm.id);
+                            }}
+                            title="Excluir marcador pessoal"
+                            aria-label="Excluir marcador pessoal"
+                          >
+                            <Trash2 size={15} />
+                          </DeleteIconButton>
+                        )}
+                      </MarkerCardWrapper>
+                    ))
+                  ) : (
+                    <EmptySubListText>Nenhum marcador pessoal criado ainda.</EmptySubListText>
+                  )}
+
+                  {onOpenAddMarker && (
+                    <QuickActionButton
+                      type="button"
+                      $color="#F59E0B"
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (!user) {
+                          onOpenLogin?.();
+                        } else {
+                          onOpenAddMarker();
+                        }
+                      }}
+                      title={user ? 'Adicionar Marcador Pessoal' : 'Entre com sua conta Google para marcar no mapa'}
+                    >
+                      <Plus size={14} />
+                      <span>{user ? 'Adicionar Marcador Pessoal' : 'Entrar para Marcar no Mapa'}</span>
+                    </QuickActionButton>
+                  )}
+                </MarkerSubList>
+              </AccordionContent>
+            </AccordionGroup>
+
+            {/* 2.3. MARCADORES DO GRUPO (NOME DO GRUPO) - SEPARADOS POR GRUPO */}
+            {user ? (
+              groups.length > 0 ? (
+                groups.map(group => {
+                  const isVisible = visibleGroupIds.has(group.id);
+                  const isGroupOpen = Boolean(openGroupSections[group.id]);
+                  const locs = group.locations || [];
+
+                  return (
+                    <AccordionGroup key={`group-section-${group.id}`}>
+                      <AccordionHeader
+                        type="button"
+                        $isOpen={isGroupOpen}
+                        $hasActiveItems={isVisible}
+                        $groupColor="#0284C7"
+                        onClick={() => toggleGroupSection(group.id)}
+                        aria-expanded={isGroupOpen}
+                      >
+                        <GroupHeaderLeft>
+                          <Shield size={15} color="#0284C7" />
+                          <span>Marcadores do Grupo ({group.name})</span>
+                          <GroupBadge $color="#0284C7">
+                            {locs.length} {locs.length === 1 ? 'ponto' : 'pontos'}
+                          </GroupBadge>
+                        </GroupHeaderLeft>
+
+                        <GroupHeaderRight>
+                          <CategoryEyeButton
+                            role="button"
+                            tabIndex={0}
+                            $isActive={isVisible}
+                            $color="#0284C7"
+                            onClick={e => {
+                              e.stopPropagation();
+                              toggleGroupVisibility(group.id);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleGroupVisibility(group.id);
+                              }
+                            }}
+                            title={
+                              isVisible
+                                ? `Ocultar marcadores do grupo ${group.name}`
+                                : `Exibir marcadores do grupo ${group.name}`
+                            }
+                            aria-label={
+                              isVisible
+                                ? `Ocultar marcadores do grupo ${group.name}`
+                                : `Exibir marcadores do grupo ${group.name}`
+                            }
+                          >
+                            {isVisible ? <Eye size={15} /> : <EyeOff size={15} />}
+                          </CategoryEyeButton>
+                          {isGroupOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </GroupHeaderRight>
+                      </AccordionHeader>
+
+                      <AccordionContent $isOpen={isGroupOpen}>
+                        <MarkerSubList>
+                          {locs.length > 0 ? (
+                            locs.map(loc => (
+                              <MarkerCardWrapper key={`group-loc-${loc.id}`}>
+                                <MarkerItemCard
+                                  type="button"
+                                  $accentColor="#0284C7"
+                                  onClick={() => onSelectGroupLocation?.(loc)}
+                                  title="Clique para localizar no mapa"
+                                >
+                                  <MarkerItemHeader>
+                                    <MarkerItemTitle>{loc.name}</MarkerItemTitle>
+                                    <MarkerMetaBadge $color="#0284C7">
+                                      Grade: {loc.militaryGrid}
+                                    </MarkerMetaBadge>
+                                  </MarkerItemHeader>
+                                  <MarkerItemMetaRow>
+                                    <span>X: {loc.inGameX}</span>
+                                    <span>•</span>
+                                    <span>Z: {loc.inGameZ}</span>
+                                    {loc.codeLock && (
+                                      <>
+                                        <span>•</span>
+                                        <MarkerMetaBadge
+                                          $color="#EF4444"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                        >
+                                          <Lock size={10} />
+                                          <span>Cadeado: {loc.codeLock}</span>
+                                        </MarkerMetaBadge>
+                                      </>
+                                    )}
+                                    {loc.lootNotes && (
+                                      <>
+                                        <span>•</span>
+                                        <MarkerMetaBadge
+                                          $color="#10B981"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                        >
+                                          <Package size={10} />
+                                          <span>Loot</span>
+                                        </MarkerMetaBadge>
+                                      </>
+                                    )}
+                                  </MarkerItemMetaRow>
+                                </MarkerItemCard>
+
+                                {onDeleteGroupLocation && (
+                                  <DeleteIconButton
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      onDeleteGroupLocation(loc.id, group.id);
+                                    }}
+                                    title="Excluir marcador do grupo"
+                                    aria-label="Excluir marcador do grupo"
+                                  >
+                                    <Trash2 size={15} />
+                                  </DeleteIconButton>
+                                )}
+                              </MarkerCardWrapper>
+                            ))
+                          ) : (
+                            <EmptySubListText>Nenhum local salvo neste grupo ainda.</EmptySubListText>
+                          )}
+
+                          {onOpenGroupManager && (
+                            <QuickActionButton
+                              type="button"
+                              $color="#0284C7"
+                              onClick={e => {
+                                e.stopPropagation();
+                                onOpenGroupManager();
+                              }}
+                            >
+                              <Shield size={14} />
+                              <span>Gerenciar Grupo & Convites</span>
+                            </QuickActionButton>
+                          )}
+                        </MarkerSubList>
+                      </AccordionContent>
+                    </AccordionGroup>
+                  );
+                })
+              ) : (
+                <ToggleRowButton
+                  type="button"
+                  $isActive={false}
+                  onClick={onOpenGroupManager}
+                  title="Criar ou entrar em um grupo"
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Shield size={16} color="#0284C7" />
+                    Marcadores do Grupo (Criar / Entrar)
+                  </span>
+                  <Plus size={16} />
+                </ToggleRowButton>
+              )
+            ) : (
+              <ToggleRowButton
+                type="button"
+                $isActive={false}
+                onClick={onOpenLogin}
+                title="Faça login para salvar e sincronizar marcadores de grupo"
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Shield size={16} color="#0284C7" />
+                  Marcadores do Grupo (Entrar com Google)
+                </span>
+                <LogIn size={16} />
+              </ToggleRowButton>
+            )}
+
+            {/* 3. Filter Groups categorized with unique icons and colors (excluindo 'custom' que já está acima) */}
+            {DAYZ_FILTER_GROUPS.filter(g => g.id !== 'custom').map(group => {
               const isGroupOpen = Boolean(openGroups[group.id]);
               const groupActiveCount = group.items.filter(i =>
                 activeFilterKeys.has(i.key)

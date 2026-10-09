@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { ThemeContextProvider } from './theme/ThemeContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { GroupProvider, useGroup, GroupLocation } from './context/GroupContext';
+import { LoginModal } from './components/auth/LoginModal';
+import { GroupManagerModal } from './components/groups/GroupManagerModal';
+import { SaveLocationModal } from './components/groups/SaveLocationModal';
 import {
   RealMarkerCategory,
   RealNasdaraMarker,
@@ -72,6 +77,42 @@ const MapContainer = styled.div`
 `;
 
 function MainApp() {
+  const { user } = useAuth();
+  const {
+    activeGroup,
+    locations,
+    pendingInviteCode,
+    allVisibleGroupLocations,
+    deleteLocation,
+  } = useGroup();
+
+  // Multi-tenant group & auth modals
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isGroupManagerModalOpen, setIsGroupManagerModalOpen] = useState(false);
+  const [isSaveLocationModalOpen, setIsSaveLocationModalOpen] = useState(false);
+  const [isAddPinActive, setIsAddPinActive] = useState(false);
+  const [transferringPersonalMarkerId, setTransferringPersonalMarkerId] = useState<string | null>(null);
+  const [saveLocationCoords, setSaveLocationCoords] = useState<{
+    lat: number;
+    lng: number;
+    inGameX: number;
+    inGameZ: number;
+    militaryGrid: string;
+    initialName?: string;
+    initialNote?: string;
+  } | undefined>(undefined);
+
+  // Auto-prompt invite flow if pending invite code in URL
+  useEffect(() => {
+    if (pendingInviteCode) {
+      if (user) {
+        setIsGroupManagerModalOpen(true);
+      } else {
+        setIsLoginModalOpen(true);
+      }
+    }
+  }, [pendingInviteCode, user]);
+
   // Lateral Filter Drawer open/collapsed state
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -214,6 +255,10 @@ function MainApp() {
   };
 
   const handleAddCustomMarker = (newMarker: CustomUserMarker) => {
+    if (!user) {
+      setIsLoginModalOpen(true);
+      return;
+    }
     setCustomMarkers(prev => [newMarker, ...prev]);
     setActiveFilterKeys(prev => new Set(prev).add('custom'));
   };
@@ -301,6 +346,28 @@ function MainApp() {
     }
   };
 
+  // Group location action: Delete from group database
+  const handleDeleteGroupLocation = async (locId: number, groupId?: number) => {
+    try {
+      await deleteLocation(locId, groupId);
+      if (selectedMarker?.id === `group-${locId}`) {
+        setSelectedMarker(null);
+      }
+    } catch (err) {
+      console.error('Erro ao excluir marcador do grupo:', err);
+    }
+  };
+
+  // Unified delete handler (for both custom and group markers)
+  const handleDeleteMarker = async (markerId: string) => {
+    if (markerId.startsWith('group-')) {
+      const numId = Number(markerId.replace('group-', ''));
+      await handleDeleteGroupLocation(numId);
+    } else {
+      handleDeleteCustomMarker(markerId);
+    }
+  };
+
   return (
     <AppContainer>
       <GlobalStyle />
@@ -314,6 +381,8 @@ function MainApp() {
         onOpenGuide={() => setIsGuideOpen(true)}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onOpenGroupManager={() => setIsGroupManagerModalOpen(true)}
       />
 
       {/* Main Layout Area: Lateral Collapsible Filter Drawer + Map */}
@@ -331,6 +400,57 @@ function MainApp() {
           onToggleGrid={() => setShowGrid(prev => !prev)}
           showCityNames={showCityNames}
           onToggleCityNames={() => setShowCityNames(prev => !prev)}
+          onOpenLogin={() => setIsLoginModalOpen(true)}
+          onOpenGroupManager={() => setIsGroupManagerModalOpen(true)}
+          customMarkers={customMarkers}
+          onSelectCustomMarker={marker => {
+            setSelectedMarker({
+              id: marker.id,
+              name: marker.name,
+              filterKey: 'custom',
+              category: 'custom',
+              lat: marker.lat,
+              lng: marker.lng,
+              x: marker.x,
+              z: marker.z,
+              grid: marker.grid,
+              title: marker.name,
+              desc: marker.note || 'Marcador pessoal criado no mapa.',
+              note: marker.note,
+            });
+            if (window.innerWidth < 1024) {
+              setIsSidebarOpen(false);
+            }
+          }}
+          onOpenAddMarker={() => {
+            if (!user) {
+              setIsLoginModalOpen(true);
+              return;
+            }
+            setIsAddPinActive(true);
+            setIsSidebarOpen(false);
+          }}
+          onSelectGroupLocation={loc => {
+            setSelectedMarker({
+              id: `group-${loc.id}`,
+              name: loc.name,
+              filterKey: 'custom',
+              category: 'custom',
+              lat: loc.lat,
+              lng: loc.lng,
+              x: Math.round(loc.inGameX),
+              z: Math.round(loc.inGameZ),
+              grid: loc.militaryGrid,
+              title: `[Grupo] ${loc.name}`,
+              desc: `Grade: ${loc.militaryGrid} | X: ${Math.round(loc.inGameX)} Z: ${Math.round(loc.inGameZ)}`,
+              note: `${loc.codeLock ? `Code Lock: ${loc.codeLock}\n` : ''}${loc.lootNotes ? `Loot: ${loc.lootNotes}\n` : ''}${loc.additionalNotes || ''}`,
+            });
+            if (window.innerWidth < 1024) {
+              setIsSidebarOpen(false);
+            }
+          }}
+          onDeleteCustomMarker={handleDeleteCustomMarker}
+          onDeleteGroupLocation={handleDeleteGroupLocation}
         />
 
         <MapContainer>
@@ -347,10 +467,26 @@ function MainApp() {
             onToggleGrid={() => setShowGrid(prev => !prev)}
             showCityNames={showCityNames}
             onToggleCityNames={() => setShowCityNames(prev => !prev)}
-            onDeleteCustomMarker={handleDeleteCustomMarker}
+            onDeleteCustomMarker={handleDeleteMarker}
+            onDeleteGroupLocation={handleDeleteGroupLocation}
+            isLoggedIn={Boolean(user)}
+            onRequireLogin={() => setIsLoginModalOpen(true)}
+            isAddPinActive={isAddPinActive}
+            onSetAddPinActive={setIsAddPinActive}
             draggingMarkerId={draggingMarkerId}
             onConfirmDragMarker={handleConfirmDrag}
             onCancelDragMarker={handleCancelDrag}
+            groupLocations={allVisibleGroupLocations}
+            activeGroupName={activeGroup?.name}
+            onSaveLocationToGroup={coords => {
+              if (!user) {
+                setIsLoginModalOpen(true);
+              } else {
+                setTransferringPersonalMarkerId(null);
+                setSaveLocationCoords(coords);
+                setIsSaveLocationModalOpen(true);
+              }
+            }}
           />
         </MapContainer>
       </MainContentArea>
@@ -364,8 +500,19 @@ function MainApp() {
         onOpenGuide={() => setIsGuideOpen(true)}
         onToggleSandstorm={() => setIsSandstormActive(prev => !prev)}
         isSandstormActive={isSandstormActive}
-        onAddMarker={() => setIsAddMarkerOpen(true)}
+        onAddMarker={() => {
+          if (!user) {
+            setIsLoginModalOpen(true);
+            return;
+          }
+          setIsAddPinActive(true);
+        }}
         activeFilterCount={activeFilterKeys.size}
+        onOpenSquad={() => {
+          if (!user) setIsLoginModalOpen(true);
+          else setIsGroupManagerModalOpen(true);
+        }}
+        squadName={activeGroup?.name}
       />
 
       {/* Location Details Bottom Sheet */}
@@ -377,7 +524,30 @@ function MainApp() {
         }}
         onStartDrag={handleStartDrag}
         onEdit={handleOpenEdit}
-        onDelete={handleDeleteCustomMarker}
+        onDelete={handleDeleteMarker}
+        onSaveToGroup={loc => {
+          if (!user) {
+            setIsLoginModalOpen(true);
+          } else {
+            const isPersonal =
+              customMarkers.some(cm => cm.id === loc.id) || !String(loc.id).startsWith('group-');
+            if (isPersonal) {
+              setTransferringPersonalMarkerId(loc.id);
+            } else {
+              setTransferringPersonalMarkerId(null);
+            }
+            setSaveLocationCoords({
+              lat: loc.lat,
+              lng: loc.lng,
+              inGameX: loc.x,
+              inGameZ: loc.z,
+              militaryGrid: loc.grid,
+              initialName: loc.name,
+              initialNote: loc.note || (loc.desc && loc.desc !== 'Marcador pessoal criado no mapa.' ? loc.desc : ''),
+            });
+            setIsSaveLocationModalOpen(true);
+          }
+        }}
       />
 
       {/* Edit Custom Marker Dialog */}
@@ -397,9 +567,62 @@ function MainApp() {
 
       {/* Custom Marker Creator Modal */}
       <AddMarkerDialog
-        isOpen={isAddMarkerOpen}
+        isOpen={isAddMarkerOpen && Boolean(user)}
         onClose={() => setIsAddMarkerOpen(false)}
         onSaveMarker={handleAddCustomMarker}
+      />
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={() => {
+          if (pendingInviteCode) {
+            setIsGroupManagerModalOpen(true);
+          }
+        }}
+      />
+
+      {/* Squad / Group Manager Modal */}
+      <GroupManagerModal
+        isOpen={isGroupManagerModalOpen}
+        onClose={() => setIsGroupManagerModalOpen(false)}
+        onSelectLocationOnMap={(loc: GroupLocation) => {
+          setSelectedMarker({
+            id: `group-${loc.id}`,
+            name: loc.name,
+            filterKey: 'custom',
+            category: 'custom',
+            lat: loc.lat,
+            lng: loc.lng,
+            x: Math.round(loc.inGameX),
+            z: Math.round(loc.inGameZ),
+            grid: loc.militaryGrid,
+            title: `${loc.name} (${activeGroup?.name || 'Esquadrão'})`,
+            desc: `Local do Esquadrão. Grade Militar: [${loc.militaryGrid}] X:${Math.round(loc.inGameX)} Z:${Math.round(loc.inGameZ)}.${loc.codeLock ? ` Code Lock: ${loc.codeLock}.` : ''}${loc.lootNotes ? ` Loot: ${loc.lootNotes}.` : ''}`,
+            note: `${loc.codeLock ? `Code Lock: ${loc.codeLock}\n` : ''}${loc.lootNotes ? `Loot: ${loc.lootNotes}\n` : ''}${loc.additionalNotes || ''}`,
+          });
+        }}
+        onOpenAddLocation={() => {
+          setIsSaveLocationModalOpen(true);
+        }}
+      />
+
+      {/* Save Location to Group Modal */}
+      <SaveLocationModal
+        isOpen={isSaveLocationModalOpen}
+        onClose={() => {
+          setIsSaveLocationModalOpen(false);
+          setTransferringPersonalMarkerId(null);
+        }}
+        defaultCoords={saveLocationCoords}
+        onSuccess={() => {
+          if (transferringPersonalMarkerId) {
+            handleDeleteMarker(transferringPersonalMarkerId);
+            setTransferringPersonalMarkerId(null);
+            setSelectedMarker(null);
+          }
+        }}
       />
     </AppContainer>
   );
@@ -408,7 +631,11 @@ function MainApp() {
 export default function App() {
   return (
     <ThemeContextProvider>
-      <MainApp />
+      <AuthProvider>
+        <GroupProvider>
+          <MainApp />
+        </GroupProvider>
+      </AuthProvider>
     </ThemeContextProvider>
   );
 }

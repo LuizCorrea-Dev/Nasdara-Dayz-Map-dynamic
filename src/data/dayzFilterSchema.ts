@@ -268,8 +268,8 @@ export const DAYZ_FILTER_GROUPS: FilterGroupDef[] = [
     categoryBadge: 'Cidades',
     groupColor: '#EA580C',
     items: [
-      { key: 'loc-city', label: 'Cidades Principais', defaultActive: true, color: '#EA580C', category: 'locais', categoryLabel: 'Cidade', iconName: 'Building2' },
-      { key: 'loc-village', label: 'Vilarejos', defaultActive: true, color: '#FB923C', category: 'locais', categoryLabel: 'Vilarejo', iconName: 'Home' },
+      { key: 'loc-city', label: 'Cidades Principais', defaultActive: false, color: '#EA580C', category: 'locais', categoryLabel: 'Cidade', iconName: 'Building2' },
+      { key: 'loc-village', label: 'Vilarejos', defaultActive: false, color: '#FB923C', category: 'locais', categoryLabel: 'Vilarejo', iconName: 'Home' },
       { key: 'loc-hamlet', label: 'Povoados', defaultActive: false, color: '#FDBA74', category: 'locais', categoryLabel: 'Povoado', iconName: 'Home' },
       { key: 'loc-hill', label: 'Colinas e Picos', defaultActive: false, color: '#78716C', category: 'locais', categoryLabel: 'Colina', iconName: 'Mountain' },
       { key: 'loc-local', label: 'Localidades Gerais', defaultActive: false, color: '#94A3B8', category: 'locais', categoryLabel: 'Local', iconName: 'MapPin' },

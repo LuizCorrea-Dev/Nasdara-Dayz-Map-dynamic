@@ -56,7 +56,22 @@ Com um mapa de **16.384m × 16.384m** nativo e mais de **5.000 pontos de interes
 - **Aba de Créditos & Fonte de Dados:**
   - Reconhecimento completo e link direto para a comunidade [TheDayZ.ru](https://thedayz.ru/).
 
-### 📱 5. Arquitetura Mobile-First & Design System
+### 🛡️ 5. Sistema de Login & Grupos Multi-Tenant (Cloud SQL Seguro)
+- **Autenticação Segura (Google Sign-In):** Login ágil com sincronização de perfil de sobrevivente.
+- **Banco de Dados Relacional PostgreSQL (Cloud SQL):**
+  - Isolamento estrito de dados por tenant/grupo (`groups`, `group_members`, `group_locations`, `users`).
+  - ORM Drizzle com migrações tipadas e pool de conexões sob demanda.
+- **Gerenciamento de Esquadrão / Tenants:**
+  - Criação de múltiplos esquadrões (ex: "Base Principal Zelenogorsk", "Squad Alfa").
+  - **Links e Códigos de Convite:** Geração automática de links de convite compartilháveis (`?invite=NSD-XXXX`) para novos membros ingressarem instantaneamente.
+  - **Lista Interna de Membros:** Exibição com ID, nome, e-mail e cargo (Líder / Membro).
+- **Locais do Esquadrão no Mapa:**
+  - Registro de pontos estratégicos com Nome, Grade Militar, Coordenadas In-game X e Z.
+  - **Code Lock:** Armazenamento seguro de senhas de cadeados de 4 dígitos com opção de ocultar/revelar e cópia rápida.
+  - **Anotações de Loot:** Inventário de suprimentos guardados (armas, munições, equipamentos médicos).
+  - Marcadores de esquadrão com visualização exclusiva e sincronizada no mapa.
+
+### 📱 6. Arquitetura Mobile-First & Design System
 - **Thumb Zone Ergonomics:** Doca inferior com controles rápidos posicionados na área de alcance natural do polegar em smartphones.
 - **Multiplataforma Agnóstica:** Construído em `styled-components` sem estilos fixos redundantes, fluido para qualquer resolução.
 - **Temas Claro e Escuro (Light / Dark Mode):** Paletas com contraste calibrado (WCAG 4.5:1+) e troca suave de tema em um toque.

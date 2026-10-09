@@ -7,6 +7,7 @@ import {
   BookOpen,
   Wind,
   Plus,
+  Shield,
 } from 'lucide-react';
 
 interface MobileThumbDockProps {
@@ -16,6 +17,8 @@ interface MobileThumbDockProps {
   isSandstormActive: boolean;
   onAddMarker: () => void;
   activeFilterCount: number;
+  onOpenSquad?: () => void;
+  squadName?: string;
 }
 
 const DockContainer = styled.nav`
@@ -91,6 +94,8 @@ export const MobileThumbDock: React.FC<MobileThumbDockProps> = ({
   isSandstormActive,
   onAddMarker,
   activeFilterCount,
+  onOpenSquad,
+  squadName,
 }) => {
   return (
     <DockContainer>
@@ -99,6 +104,13 @@ export const MobileThumbDock: React.FC<MobileThumbDockProps> = ({
         <DockLabel>Filtros</DockLabel>
         {activeFilterCount > 0 && <BadgeCount>{activeFilterCount}</BadgeCount>}
       </DockButton>
+
+      {onOpenSquad && (
+        <DockButton onClick={onOpenSquad}>
+          <Shield size={20} color="#EA580C" />
+          <DockLabel>{squadName ? 'Esquadrão' : 'Grupos'}</DockLabel>
+        </DockButton>
+      )}
 
       <DockButton onClick={onAddMarker}>
         <Plus size={20} />

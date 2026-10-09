@@ -16,10 +16,13 @@ import {
   Move,
   Type,
   Trash2,
+  Shield,
+  MapPin,
 } from 'lucide-react';
 import { RealNasdaraMarker } from '../../data/nasdaraTypes';
 import { FILTER_KEY_COLORS, getMarkerSvgContent } from '../../data/dayzFilterSchema';
 import rawMarkersData from '../../data/nasdaraRealMarkers.json';
+import { GroupLocation } from '../../context/GroupContext';
 import { IconButton } from '../ui/IconButton';
 import { Button } from '../ui/Button';
 
@@ -61,7 +64,65 @@ interface NasdaraLeafletMapProps {
     newGrid: string
   ) => void;
   onCancelDragMarker?: () => void;
+  groupLocations?: GroupLocation[];
+  activeGroupName?: string;
+  onSaveLocationToGroup?: (coords: {
+    lat: number;
+    lng: number;
+    inGameX: number;
+    inGameZ: number;
+    militaryGrid: string;
+  }) => void;
+  onDeleteGroupLocation?: (id: number) => void;
+  isLoggedIn?: boolean;
+  onRequireLogin?: () => void;
+  isAddPinActive?: boolean;
+  onSetAddPinActive?: (active: boolean) => void;
 }
+
+const AddPinHudNotification = styled.div`
+  position: absolute;
+  top: ${props => props.theme.spacing.lg};
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1010;
+  display: flex;
+  align-items: center;
+  gap: ${props => props.theme.spacing.sm};
+  background-color: ${props => props.theme.colors.surface};
+  border: 1px solid ${props => props.theme.colors.primary};
+  border-radius: ${props => props.theme.borderRadius.md};
+  padding: 8px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  font-weight: 600;
+  color: ${props => props.theme.colors.text};
+  white-space: nowrap;
+
+  button {
+    background: transparent;
+    border: none;
+    color: ${props => props.theme.colors.danger};
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: ${props => props.theme.borderRadius.sm};
+    margin-left: 8px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  @media (max-width: 640px) {
+    top: auto;
+    bottom: 84px;
+    max-width: 90%;
+    white-space: normal;
+    text-align: center;
+  }
+`;
 
 const MapContainer = styled.div`
   width: 100%;
@@ -106,7 +167,7 @@ const CoordinateHud = styled.div`
   color: ${props => props.theme.colors.text};
 
   @media (max-width: 640px) {
-    font-size: 11px;
+    font-size: 18px;
     padding: ${props => props.theme.spacing.xs} ${props => props.theme.spacing.sm};
   }
 `;
@@ -284,6 +345,14 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
   draggingMarkerId,
   onConfirmDragMarker,
   onCancelDragMarker,
+  groupLocations = [],
+  activeGroupName,
+  onSaveLocationToGroup,
+  onDeleteGroupLocation,
+  isLoggedIn = false,
+  onRequireLogin,
+  isAddPinActive,
+  onSetAddPinActive,
 }) => {
   const mapElementRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -299,7 +368,20 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
 
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerPoints, setRulerPoints] = useState<L.LatLng[]>([]);
-  const [addPinActive, setAddPinActive] = useState(false);
+  const [internalAddPinActive, setInternalAddPinActive] = useState(false);
+
+  const isAddPinControlled = typeof isAddPinActive === 'boolean';
+  const effectiveAddPinActive = isAddPinControlled ? isAddPinActive : internalAddPinActive;
+  const setAddPinActiveState = useCallback(
+    (active: boolean) => {
+      if (isAddPinControlled) {
+        onSetAddPinActive?.(active);
+      } else {
+        setInternalAddPinActive(active);
+      }
+    },
+    [isAddPinControlled, onSetAddPinActive]
+  );
 
   // Live position during drag (ref for 60fps tracking without React re-render cancellation)
   const tempDragPosRef = useRef<L.LatLng | null>(null);
@@ -498,7 +580,12 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
         return;
       }
 
-      if (addPinActive) {
+      if (effectiveAddPinActive) {
+        if (!isLoggedIn) {
+          onRequireLogin?.();
+          setAddPinActiveState(false);
+          return;
+        }
         const ingame = latLngToInGame(e.latlng);
         const newPin: CustomUserMarker = {
           id: `pin-${Date.now()}`,
@@ -512,7 +599,7 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
           category: 'custom',
         };
         onAddCustomMarker(newPin);
-        setAddPinActive(false);
+        setAddPinActiveState(false);
       }
     };
 
@@ -520,7 +607,16 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
     return () => {
       map.off('click', handleMapClick);
     };
-  }, [rulerActive, addPinActive, latLngToInGame, onAddCustomMarker, draggingMarkerId]);
+  }, [
+    rulerActive,
+    effectiveAddPinActive,
+    latLngToInGame,
+    onAddCustomMarker,
+    draggingMarkerId,
+    isLoggedIn,
+    onRequireLogin,
+    setAddPinActiveState,
+  ]);
 
   // 4. Update Ruler Polyline & Points
   useEffect(() => {
@@ -533,11 +629,11 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
     if (rulerPoints.length > 0) {
       rulerPoints.forEach(pt => {
         const circle = L.circleMarker(pt, {
-          radius: 6,
+          radius: 3.5,
           color: '#FFFFFF',
           fillColor: '#F59E0B',
           fillOpacity: 1,
-          weight: 2,
+          weight: 1.5,
         });
         rulerGroup.addLayer(circle);
       });
@@ -557,7 +653,12 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
   // 5. Filter markers
   const filteredMarkers = useMemo(() => {
     return allRealMarkers.filter(m => {
-      if (!activeCategories.has(m.filterKey)) return false;
+      const isCityOrVillage = m.filterKey === 'loc-city' || m.filterKey === 'loc-village';
+      const isShownByName = showCityNames && isCityOrVillage;
+      const isShownByFilter = activeCategories.has(m.filterKey);
+
+      if (!isShownByName && !isShownByFilter) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesName = m.name.toLowerCase().includes(q);
@@ -568,7 +669,7 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
       }
       return true;
     });
-  }, [activeCategories, searchQuery]);
+  }, [activeCategories, searchQuery, showCityNames]);
 
   const getMarkerColor = (filterKey: string) => {
     return FILTER_KEY_COLORS[filterKey] || '#F59E0B';
@@ -594,61 +695,108 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
 
       const isSelected = selectedMarker?.id === marker.id;
       const color = getMarkerColor(marker.filterKey);
-      const isLocation = marker.filterKey.startsWith('loc-');
       const isCity = marker.filterKey === 'loc-city';
-      const showLabel = showCityNames && isLocation;
-      const markerSize = isSelected ? 34 : isCity ? 28 : isLocation ? 24 : 22;
-      const svgSize = isSelected ? 16 : isCity ? 14 : isLocation ? 13 : 12;
-      const svgIconMarkup = getMarkerSvgContent(marker.filterKey, svgSize);
+      const isVillage = marker.filterKey === 'loc-village';
+      const isCityOrVillage = isCity || isVillage;
+      const isLocation = marker.filterKey.startsWith('loc-');
 
-      const iconHtml = `
-        <div style="
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          transform: translate(-50%, -50%);
-          pointer-events: auto;
-        ">
+      // O ícone só é exibido quando ativado/setado nos filtros
+      const showIcon = activeCategories.has(marker.filterKey);
+      // Nomes de cidades e vilarejos (ou localidades) exibidos quando showCityNames estiver ativo
+      const showLabel = showCityNames && (isCityOrVillage || isLocation);
+
+      if (!showIcon && !showLabel) return;
+
+      let iconHtml: string;
+
+      if (!showIcon && showLabel) {
+        // Exibe apenas os nomes das cidades e vilarejos, SEM ÍCONES
+        iconHtml = `
           <div style="
-            width: ${markerSize}px;
-            height: ${markerSize}px;
-            border-radius: 50%;
-            background-color: ${color};
-            border: ${isSelected ? '3px' : '2px'} solid #FFFFFF;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.65);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #FFFFFF;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
             cursor: pointer;
-            transition: transform 0.15s ease;
           ">
-            ${svgIconMarkup}
-          </div>
-          ${showLabel ? `
             <div style="
-              margin-top: 2px;
-              padding: 1px 6px;
-              background-color: rgba(12, 11, 11, 0.9);
-              border: 1px solid ${isCity ? '#EA580C' : 'rgba(255, 255, 255, 0.25)'};
-              border-radius: 3px;
-              color: ${isCity ? '#FDBA74' : '#F1F5F9'};
-              font-size: ${isCity ? '11px' : '10px'};
+              padding: ${isCity ? '2px 8px' : '1px 6px'};
+              background-color: ${isCity ? 'rgba(15, 23, 42, 0.92)' : 'rgba(24, 24, 27, 0.85)'};
+              border: 1px solid ${isSelected ? '#38BDF8' : isCity ? '#EA580C' : 'rgba(251, 146, 60, 0.45)'};
+              border-radius: 4px;
+              color: ${isCity ? '#FED7AA' : '#F1F5F9'};
+              font-size: ${isCity ? '11px' : '9.5px'};
               font-weight: ${isCity ? '800' : '600'};
               font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace, sans-serif;
               text-transform: uppercase;
-              letter-spacing: 0.5px;
+              letter-spacing: ${isCity ? '0.8px' : '0.4px'};
               white-space: nowrap;
-              pointer-events: none;
-              box-shadow: 0 2px 5px rgba(0,0,0,0.85);
-              text-shadow: 0 1px 2px #000;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.85);
+              text-shadow: 0 1px 3px #000;
               user-select: none;
+              transition: transform 0.15s ease, border-color 0.15s ease;
+              ${isSelected ? 'outline: 2px solid #38BDF8; outline-offset: 1px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);' : ''}
             ">
               ${marker.name}
             </div>
-          ` : ''}
-        </div>
-      `;
+          </div>
+        `;
+      } else {
+        // Exibe o ícone (pois está setado nos filtros) e opcionalmente o nome abaixo se showLabel for true
+        const markerSize = isSelected ? 17 : isCity ? 14 : isLocation ? 16 : 18;
+        const svgSize = isSelected ? 8 : isCity ? 7 : isLocation ? 12 : 12;
+        const svgIconMarkup = getMarkerSvgContent(marker.filterKey, svgSize);
+
+        iconHtml = `
+          <div style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+          ">
+            <div style="
+              width: ${markerSize}px;
+              height: ${markerSize}px;
+              border-radius: 50%;
+              background-color: ${color};
+              border: ${isSelected ? '2px' : '1px'} solid #FFFFFF;
+              box-shadow: 0 1px 4px rgba(0,0,0,0.65);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #FFFFFF;
+              cursor: pointer;
+              transition: transform 0.15s ease;
+            ">
+              ${svgIconMarkup}
+            </div>
+            ${showLabel ? `
+              <div style="
+                margin-top: 2px;
+                padding: 1px 5px;
+                background-color: rgba(12, 11, 11, 0.9);
+                border: 1px solid ${isCity ? '#EA580C' : 'rgba(255, 255, 255, 0.25)'};
+                border-radius: 3px;
+                color: ${isCity ? '#FDBA74' : '#F1F5F9'};
+                font-size: ${isCity ? '10px' : '9px'};
+                font-weight: ${isCity ? '800' : '600'};
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace, sans-serif;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+                pointer-events: none;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.85);
+                text-shadow: 0 1px 2px #000;
+                user-select: none;
+              ">
+                ${marker.name}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
 
       const divIcon = L.divIcon({
         html: iconHtml,
@@ -694,17 +842,17 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
             pointer-events: auto;
           ">
             <div style="
-              width: ${isCurrentlyDragging ? 38 : 30}px;
-              height: ${isCurrentlyDragging ? 38 : 30}px;
+              width: ${isCurrentlyDragging ? 19 : 15}px;
+              height: ${isCurrentlyDragging ? 19 : 15}px;
               border-radius: 50%;
               background-color: ${isCurrentlyDragging ? '#EF4444' : '#F59E0B'};
-              border: ${isCurrentlyDragging ? '3px solid #FFF' : '2px solid #FFFFFF'};
-              box-shadow: 0 4px 16px ${isCurrentlyDragging ? 'rgba(239, 68, 68, 0.7)' : 'rgba(0,0,0,0.5)'};
+              border: ${isCurrentlyDragging ? '2px solid #FFF' : '1px solid #FFFFFF'};
+              box-shadow: 0 2px 8px ${isCurrentlyDragging ? 'rgba(239, 68, 68, 0.7)' : 'rgba(0,0,0,0.5)'};
               display: flex;
               align-items: center;
               justify-content: center;
               color: #000;
-              font-size: ${isCurrentlyDragging ? 18 : 14}px;
+              font-size: ${isCurrentlyDragging ? 9 : 7}px;
               font-weight: bold;
               cursor: ${isCurrentlyDragging ? 'move' : 'pointer'};
               animation: ${isCurrentlyDragging ? 'pulseRing 1.5s infinite' : 'none'};
@@ -798,9 +946,97 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
         group.addLayer(marker);
       });
     }
+
+    // Render Group / Tenant SQL Locations
+    if (Array.isArray(groupLocations)) {
+      groupLocations.forEach(loc => {
+        if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
+
+        const isSelected = selectedMarker?.id === `group-${loc.id}`;
+        const hasCodeLock = Boolean(loc.codeLock);
+        const hasLoot = Boolean(loc.lootNotes);
+
+        const iconHtml = `
+          <div style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+            cursor: pointer;
+          ">
+            <div style="
+              width: ${isSelected ? 20 : 16}px;
+              height: ${isSelected ? 20 : 16}px;
+              border-radius: 50%;
+              background-color: #0284C7;
+              border: 2px solid ${isSelected ? '#38BDF8' : '#FFFFFF'};
+              box-shadow: 0 2px 8px rgba(2, 132, 199, 0.7);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #FFFFFF;
+              font-size: 9px;
+              font-weight: bold;
+              transition: transform 0.15s ease;
+            ">
+              ${hasCodeLock ? '🔒' : hasLoot ? '📦' : '🛡️'}
+            </div>
+            <div style="
+              margin-top: 2px;
+              padding: 2px 6px;
+              background-color: rgba(15, 23, 42, 0.94);
+              border: 1px solid #38BDF8;
+              border-radius: 3px;
+              color: #E0F2FE;
+              font-size: 10px;
+              font-weight: 700;
+              white-space: nowrap;
+              pointer-events: none;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.8);
+              display: flex;
+              align-items: center;
+              gap: 4px;
+            ">
+              <span>${loc.name}</span>
+              ${hasCodeLock ? `<span style="color: #FBBF24; font-family: monospace;">[🔒 ${loc.codeLock}]</span>` : ''}
+            </div>
+          </div>
+        `;
+
+        const divIcon = L.divIcon({
+          html: iconHtml,
+          className: 'dayz-group-location-marker',
+          iconSize: [0, 0],
+        });
+
+        const marker = L.marker([loc.lat, loc.lng], { icon: divIcon });
+
+        marker.on('click', (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          onSelectMarker({
+            id: `group-${loc.id}`,
+            name: loc.name,
+            filterKey: 'custom',
+            category: 'custom',
+            lat: loc.lat,
+            lng: loc.lng,
+            x: Math.round(loc.inGameX),
+            z: Math.round(loc.inGameZ),
+            grid: loc.militaryGrid,
+            title: `${loc.name} (${activeGroupName || 'Esquadrão'})`,
+            desc: `Local do Esquadrão. Grade Militar: [${loc.militaryGrid}] X:${Math.round(loc.inGameX)} Z:${Math.round(loc.inGameZ)}.${hasCodeLock ? ` Code Lock: ${loc.codeLock}.` : ''}${hasLoot ? ` Loot: ${loc.lootNotes}.` : ''}${loc.createdByName ? ` Salvo por: ${loc.createdByName}.` : ''}`,
+            note: `${hasCodeLock ? `Code Lock: ${loc.codeLock}\n` : ''}${hasLoot ? `Loot: ${loc.lootNotes}\n` : ''}${loc.additionalNotes || ''}`,
+          });
+        });
+
+        group.addLayer(marker);
+      });
+    }
   }, [
     filteredMarkers,
     customMarkers,
+    groupLocations,
     selectedMarker,
     activeCategories,
     onSelectMarker,
@@ -808,6 +1044,7 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
     draggingMarkerId,
     latLngToInGame,
     showCityNames,
+    activeGroupName,
   ]);
 
   // 7. Pan to selected marker
@@ -839,7 +1076,7 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
     mapInstanceRef.current?.fitBounds(bounds);
     setRulerPoints([]);
     setRulerActive(false);
-    setAddPinActive(false);
+    setAddPinActiveState(false);
   };
 
   // Disable click propagation on reposition HUD so clicking buttons never registers as map clicks
@@ -890,11 +1127,17 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
 
         <IconButton
           size="md"
-          variant={addPinActive ? 'primary' : 'default'}
-          active={addPinActive}
-          onClick={() => setAddPinActive(!addPinActive)}
+          variant={effectiveAddPinActive ? 'primary' : 'default'}
+          active={effectiveAddPinActive}
+          onClick={() => {
+            if (!isLoggedIn) {
+              onRequireLogin?.();
+              return;
+            }
+            setAddPinActiveState(!effectiveAddPinActive);
+          }}
           aria-label="Adicionar Marcador Pessoal"
-          title="Adicionar ponto no mapa"
+          title={isLoggedIn ? 'Adicionar ponto no mapa' : 'Entre com sua conta para marcar no mapa'}
         >
           <Plus size={20} />
         </IconButton>
@@ -964,6 +1207,17 @@ export const NasdaraLeafletMap: React.FC<NasdaraLeafletMapProps> = ({
 
       {/* Dynamic Sandstorm Overlay */}
       {isSandstormActive && <SandstormEffectOverlay />}
+
+      {/* Floating Add Pin Guidance Banner */}
+      {effectiveAddPinActive && (
+        <AddPinHudNotification>
+          <MapPin size={16} color="#3B82F6" />
+          <span>Modo de Marcação Ativo: Toque em qualquer ponto do mapa para marcar</span>
+          <button type="button" onClick={() => setAddPinActiveState(false)}>
+            Cancelar
+          </button>
+        </AddPinHudNotification>
+      )}
 
       {/* Distance Measurement Result HUD */}
       {rulerActive && (
