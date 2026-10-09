@@ -27,11 +27,48 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
 }
 
+const CACHE_KEY = 'nasdara_cached_user_session';
+
+function mapFirebaseUserToDbUser(fbUser: FirebaseUser): DbUser {
+  let numericId = 1;
+  try {
+    let hash = 0;
+    for (let i = 0; i < fbUser.uid.length; i++) {
+      hash = (hash << 5) - hash + fbUser.uid.charCodeAt(i);
+      hash |= 0;
+    }
+    numericId = Math.abs(hash) || 1;
+  } catch {
+    numericId = 1;
+  }
+
+  return {
+    id: numericId,
+    uid: fbUser.uid,
+    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Sobrevivente',
+    email: fbUser.email || '',
+    avatarUrl: fbUser.photoURL || undefined,
+    createdAt: fbUser.metadata?.creationTime || new Date().toISOString(),
+  };
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [user, setUser] = useState<DbUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(() => auth.currentUser);
+  const [user, setUser] = useState<DbUser | null>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return auth.currentUser ? mapFirebaseUserToDbUser(auth.currentUser) : null;
+  });
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -42,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(freshToken);
       return freshToken;
     } catch (err) {
-      console.error('Falha ao obter token:', err);
+      console.warn('Falha ao obter token:', err);
       return null;
     }
   }, []);
@@ -54,14 +91,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           Authorization: `Bearer ${authToken}`,
         },
       });
-      if (res.ok) {
+
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const dbUserData: DbUser = await res.json();
-        setUser(dbUserData);
+        if (dbUserData && dbUserData.uid) {
+          setUser(dbUserData);
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(dbUserData));
+          } catch {
+            // ignore
+          }
+        }
       } else {
-        console.warn('Não foi possível sincronizar perfil:', res.status);
+        // Backend SQL route not available or static hosting (e.g., Vercel)
+        // User remains securely authenticated via Firebase
       }
-    } catch (err) {
-      console.error('Erro na sincronização com o banco SQL:', err);
+    } catch {
+      // Safe fallback - keep Firebase profile
     }
   }, []);
 
@@ -76,16 +123,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
+        // Establish immediate user session from Firebase
+        const profile = mapFirebaseUserToDbUser(fbUser);
+        setUser(prev => prev || profile);
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(profile));
+        } catch {
+          // ignore
+        }
+
         try {
           const idToken = await fbUser.getIdToken();
           setToken(idToken);
-          await syncBackendUser(idToken);
+          // Sync with database in background
+          syncBackendUser(idToken);
         } catch (err) {
-          console.error('Erro ao processar login:', err);
+          console.warn('Erro ao obter token do Firebase:', err);
         }
       } else {
         setToken(null);
         setUser(null);
+        try {
+          localStorage.removeItem(CACHE_KEY);
+        } catch {
+          // ignore
+        }
       }
       setLoading(false);
     });
@@ -98,9 +160,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       const cred = await signInWithPopup(auth, googleAuthProvider);
       if (cred.user) {
-        const idToken = await cred.user.getIdToken();
-        setToken(idToken);
-        await syncBackendUser(idToken);
+        setFirebaseUser(cred.user);
+        const profile = mapFirebaseUserToDbUser(cred.user);
+        setUser(profile);
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(profile));
+        } catch {
+          // ignore
+        }
+
+        try {
+          const idToken = await cred.user.getIdToken();
+          setToken(idToken);
+          syncBackendUser(idToken);
+        } catch (tokErr) {
+          console.warn('Erro ao obter token pós login:', tokErr);
+        }
       }
     } catch (err: any) {
       console.error('Falha no login com Google:', err);
@@ -117,6 +192,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFirebaseUser(null);
       setUser(null);
       setToken(null);
+      try {
+        localStorage.removeItem(CACHE_KEY);
+      } catch {
+        // ignore
+      }
     } catch (err) {
       console.error('Falha ao encerrar sessão:', err);
     } finally {
@@ -149,3 +229,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

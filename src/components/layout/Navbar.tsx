@@ -163,6 +163,59 @@ const LoginButton = styled.button`
   }
 `;
 
+const UserBadgeButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 8px;
+  background-color: ${props => props.theme.colors.surface};
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: ${props => props.theme.borderRadius.md};
+  color: ${props => props.theme.colors.text};
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: ${props => props.theme.colors.primary};
+    background-color: ${props => props.theme.colors.surfaceHover};
+  }
+
+  .user-avatar-mini {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: ${props => props.theme.colors.primary};
+    color: ${props => props.theme.colors.primaryText};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    overflow: hidden;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .user-name-label {
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    @media (max-width: 768px) {
+      display: none;
+    }
+  }
+`;
+
+
 export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchChange,
@@ -214,11 +267,24 @@ export const Navbar: React.FC<NavbarProps> = ({
       <ActionsContainer>
         {/* Squad management & Login */}
         {user ? (
-          <SquadButton onClick={onOpenGroupManager} title="Gerenciar Esquadrão e Grupos">
-            <Shield size={16} color="#EA580C" />
-            <span className="label-full">Esquadrão:</span>
-            <span className="squad-name">{activeGroup ? activeGroup.name : 'Selecionar'}</span>
-          </SquadButton>
+          <>
+            <SquadButton onClick={onOpenGroupManager} title="Gerenciar Esquadrão e Grupos">
+              <Shield size={16} color="#EA580C" />
+              <span className="label-full">Esquadrão:</span>
+              <span className="squad-name">{activeGroup ? activeGroup.name : 'Selecionar'}</span>
+            </SquadButton>
+
+            <UserBadgeButton onClick={onOpenLogin} title={`Conectado como ${user.name} (${user.email})`}>
+              <div className="user-avatar-mini">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} />
+                ) : (
+                  user.name.charAt(0).toUpperCase()
+                )}
+              </div>
+              <span className="user-name-label">{user.name}</span>
+            </UserBadgeButton>
+          </>
         ) : (
           <LoginButton onClick={onOpenLogin} title="Entrar para sincronizar seu grupo">
             <LogIn size={15} />

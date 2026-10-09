@@ -102,16 +102,19 @@ function MainApp() {
     initialNote?: string;
   } | undefined>(undefined);
 
-  // Auto-prompt invite flow if pending invite code in URL
+  // Auto-prompt invite flow once if pending invite code in URL
+  const [hasPromptedInvite, setHasPromptedInvite] = useState(false);
   useEffect(() => {
-    if (pendingInviteCode) {
+    if (pendingInviteCode && !hasPromptedInvite) {
+      setHasPromptedInvite(true);
       if (user) {
         setIsGroupManagerModalOpen(true);
       } else {
         setIsLoginModalOpen(true);
       }
     }
-  }, [pendingInviteCode, user]);
+  }, [pendingInviteCode, user, hasPromptedInvite]);
+
 
   // Lateral Filter Drawer open/collapsed state
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
